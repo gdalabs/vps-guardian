@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VPS Guardian - Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <h1>VPS Guardian</h1>
+    <span class="subtitle">Information Security 24H Monitor</span>
+  </div>
+  <div class="header-right">
+    <button id="qr-btn" onclick="toggleQR()" title="QR Code">QR</button>
+    <span class="theme-toggle-label">
+      <span class="icon" id="theme-icon">&#9788;</span>
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+    </span>
+    <span id="clock"></span>
+    <span id="status-dot" class="dot green"></span>
+    <select id="time-range">
+      <option value="1">1h</option>
+      <option value="6">6h</option>
+      <option value="24" selected>24h</option>
+      <option value="72">3d</option>
+      <option value="168">7d</option>
+    </select>
+    <button onclick="refreshAll()">Refresh</button>
+  </div>
+</header>
+
+<div class="stats-bar" id="stats-bar">
+  <div class="stat" id="stat-logins"><span class="stat-value">-</span><span class="stat-label">SSH Logins</span></div>
+  <div class="stat" id="stat-failed"><span class="stat-value">-</span><span class="stat-label">Failed Attempts</span></div>
+  <div class="stat" id="stat-attackers"><span class="stat-value">-</span><span class="stat-label">Unique Attackers</span></div>
+  <div class="stat" id="stat-unknown"><span class="stat-value">-</span><span class="stat-label">Unknown IP Logins</span></div>
+  <div class="stat" id="stat-alerts"><span class="stat-value">-</span><span class="stat-label">Active Alerts</span></div>
+  <div class="stat" id="stat-hooks"><span class="stat-value">-</span><span class="stat-label">Hook Blocks</span></div>
+</div>
+
+<div class="grid">
+  <!-- Panel 1: Resources -->
+  <div class="panel" id="panel-resources">
+    <h2>System Resources</h2>
+    <div class="resource-grid">
+      <div class="resource-item">
+        <div class="resource-label">CPU</div>
+        <div class="progress-bar"><div class="progress-fill" id="cpu-bar"></div></div>
+        <div class="resource-value" id="cpu-value">-</div>
+      </div>
+      <div class="resource-item">
+        <div class="resource-label">Memory (24 GB)</div>
+        <div class="progress-bar"><div class="progress-fill" id="mem-bar"></div></div>
+        <div class="resource-value" id="mem-value">-</div>
+      </div>
+      <div class="resource-item">
+        <div class="resource-label">Disk (1.2 TB)</div>
+        <div class="progress-bar"><div class="progress-fill" id="disk-bar"></div></div>
+        <div class="resource-value" id="disk-value">-</div>
+      </div>
+      <div class="resource-item">
+        <div class="resource-label">Swap (2 GB)</div>
+        <div class="progress-bar"><div class="progress-fill" id="swap-bar"></div></div>
+        <div class="resource-value" id="swap-value">-</div>
+      </div>
+      <div class="resource-item full-width">
+        <div class="resource-label">Load Average</div>
+        <div class="resource-value" id="load-value">-</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel 2: Services & Tech Stack -->
+  <div class="panel" id="panel-services">
+    <h2>Services & Ports</h2>
+    <div class="service-lists">
+      <div>
+        <h3>Systemd Services</h3>
+        <div id="systemd-list" class="service-list"></div>
+      </div>
+      <div>
+        <h3>Docker Containers</h3>
+        <div id="docker-list" class="service-list"></div>
+      </div>
+      <div>
+        <h3>Listening Ports</h3>
+        <div id="ports-list" class="service-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel 3: Claude Code Monitor -->
+  <div class="panel" id="panel-claude">
+    <h2>Claude Code Instances</h2>
+    <div id="claude-list" class="table-container"></div>
+  </div>
+
+  <!-- Panel 4: Access Log & Security -->
+  <div class="panel wide" id="panel-access">
+    <h2>Access Log</h2>
+    <div class="tab-bar">
+      <button class="tab active" data-tab="logins">Successful Logins</button>
+      <button class="tab" data-tab="failed">Failed (Top IPs)</button>
+      <button class="tab" data-tab="unknown">Unknown IPs</button>
+      <button class="tab" data-tab="hooks">Hook Blocks</button>
+    </div>
+    <div id="access-content" class="table-container"></div>
+  </div>
+
+  <!-- Panel 5: API Cost -->
+  <div class="panel wide" id="panel-cost">
+    <h2>API Cost (Claude Code)</h2>
+    <div class="cost-summary" id="cost-summary"></div>
+    <div class="cost-detail" id="cost-detail"></div>
+  </div>
+
+  <!-- Panel 6: Alerts -->
+  <div class="panel" id="panel-alerts">
+    <h2>Alerts</h2>
+    <div id="alerts-list" class="alert-container"></div>
+  </div>
+
+  <!-- Panel 6: Security Posture -->
+  <div class="panel" id="panel-security">
+    <h2>Security Posture</h2>
+    <div id="security-checklist" class="checklist"></div>
+  </div>
+</div>
+
+<!-- QR Modal -->
+<div id="qr-overlay" class="qr-overlay" onclick="toggleQR()">
+  <div class="qr-modal" onclick="event.stopPropagation()">
+    <div class="qr-header">
+      <span>Scan to access Dashboard</span>
+      <button onclick="toggleQR()">&times;</button>
+    </div>
+    <div class="qr-body">
+      <img id="qr-img" src="/api/qr" alt="QR Code" width="240" height="240">
+      <div class="qr-url" id="qr-url"></div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

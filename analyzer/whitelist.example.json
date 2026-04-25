@@ -1,0 +1,14 @@
+{
+  "tailscale": {
+    "100.x.x.x": "my-vps (self)",
+    "100.x.x.x": "my-laptop",
+    "100.x.x.x": "my-phone"
+  },
+  "known_public": {
+    "203.0.113.1": "Home ISP",
+    "198.51.100.1": "Office"
+  },
+  "notes": {
+    "203.0.113.1": "Example: replace with your actual IPs"
+  }
+}

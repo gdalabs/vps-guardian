@@ -1,0 +1,4 @@
+# VPS Guardian — Collector cron (every 5 minutes)
+# Install: crontab -l | cat - cron/guardian_cron | crontab -
+# Or run: vps-guardian install (which sets this up automatically)
+*/5 * * * * GUARDIAN_DIR/run_all.sh >> GUARDIAN_DIR/data/cron.log 2>&1
