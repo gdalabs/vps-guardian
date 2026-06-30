@@ -24,7 +24,10 @@ while IFS= read -r line; do
 done < <(ps aux | grep "[.]vscode/cli/servers" | grep -v grep | grep -v "cpuUsage\|shellIntegration" || true)
 
 # Detect VS Code terminal sessions (spawned by tunnel)
-term_count=$(ps aux | grep "shellIntegration-bash.sh" | grep -vc grep 2>/dev/null || echo 0)
+# grep -vc prints "0" AND exits 1 on no match; under pipefail that combined
+# with `|| echo 0` produced a two-line "0\n0" that broke the arithmetic test.
+term_count=$(ps aux | grep "shellIntegration-bash.sh" | grep -vc grep || true)
+term_count=${term_count:-0}
 if [[ "$term_count" -gt 0 ]]; then
     detail="{\"terminal_sessions\":$term_count}"
     sqlite3 "$DB_PATH" "INSERT INTO access_log (timestamp, channel, event_type, source_ip, username, detail, is_whitelisted) VALUES ('$NOW_UTC', 'vscode_tunnel', 'terminal_active', 'local', '$(whoami)', '$detail', 1);"

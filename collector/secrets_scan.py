@@ -6,6 +6,7 @@ patterns like GitHub PATs, Cloudflare tokens, API keys, and PII strings.
 """
 
 import json
+import os
 import re
 import sqlite3
 from datetime import datetime, timezone
@@ -160,7 +161,15 @@ def main():
         if target.is_file():
             files = [target]
         else:
-            files = [f for f in target.rglob("*") if f.is_file()]
+            # Walk with os.walk so unreadable subdirs (e.g. root-owned
+            # mattermost plugin dirs) are skipped instead of crashing the scan.
+            # Prune SKIP_DIRS in place so we never descend into heavy/forbidden
+            # trees (node_modules, .git, data) — keeps the scan fast.
+            files = []
+            for root, dirs, names in os.walk(target, onerror=lambda _e: None):
+                dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+                for name in names:
+                    files.append(Path(root) / name)
 
         for filepath in files:
             if not should_scan(filepath):
@@ -178,25 +187,33 @@ def main():
             seen.add(key)
             unique_findings.append(f)
 
-    # Insert findings
+    # Insert findings (skip if identical unacknowledged alert already exists)
+    new_count = 0
     for finding in unique_findings:
         detail = json.dumps(finding)
+        message = f"{finding['type']} in {Path(finding['file']).name}:{finding['line']}"
+        severity = "critical" if not finding["type"].startswith("pii_") else "warning"
+        category = "secrets_exposed" if not finding["type"].startswith("pii_") else "pii_leak"
+
+        # Check for existing unacknowledged alert with same message
+        existing = conn.execute(
+            "SELECT id FROM alerts WHERE message=? AND category=? AND acknowledged=0 LIMIT 1",
+            (message, category),
+        ).fetchone()
+        if existing:
+            continue  # Already reported and unresolved — skip
 
         conn.execute(
             "INSERT INTO access_log (timestamp, channel, event_type, source_ip, username, detail, is_whitelisted) "
             "VALUES (?, 'secrets_scan', 'secret_found', 'local', 'scanner', ?, 0)",
             (now_utc, detail),
         )
-
-        severity = "critical" if not finding["type"].startswith("pii_") else "warning"
-        category = "secrets_exposed" if not finding["type"].startswith("pii_") else "pii_leak"
         conn.execute(
             "INSERT INTO alerts (timestamp, severity, category, message, detail) "
             "VALUES (?, ?, ?, ?, ?)",
-            (now_utc, severity, category,
-             f"{finding['type']} in {Path(finding['file']).name}:{finding['line']}",
-             detail),
+            (now_utc, severity, category, message, detail),
         )
+        new_count += 1
 
     # Update collector state
     conn.execute(
@@ -210,7 +227,7 @@ def main():
     conn.commit()
     conn.close()
 
-    print(f"[secrets_scan] {len(unique_findings)} findings in {files_scanned} files")
+    print(f"[secrets_scan] {len(unique_findings)} findings in {files_scanned} files ({new_count} new alerts)")
 
 
 if __name__ == "__main__":
